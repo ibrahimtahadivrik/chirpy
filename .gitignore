@@ -1,0 +1,10 @@
+# IDE ve Sistem Dosyaları
+.idea/
+.DS_Store
+
+# Loglar
+*.log
+
+.*
+
+!.gitignore
