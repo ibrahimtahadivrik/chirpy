@@ -4,6 +4,7 @@
 
 # Loglar
 *.log
+out
 
 .*
 
