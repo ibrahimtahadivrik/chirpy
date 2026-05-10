@@ -25,6 +25,7 @@ type server struct {
 type apiConfig struct {
 	database       *database.Queries
 	platform       string
+	jwtSecret      string
 	fileserverHits atomic.Int32
 }
 
@@ -310,6 +311,7 @@ func (cfg *apiConfig) getOneChirpHandler(w http.ResponseWriter, r *http.Request)
 func main() {
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
+	jwtSecret := os.Getenv("JWT_SECRET")
 	platform := os.Getenv("PLATFORM")
 	db, _ := sql.Open("postgres", dbURL)
 	dbQueries := database.New(db)
@@ -318,6 +320,7 @@ func main() {
 
 	apiCfg := &apiConfig{}
 	apiCfg.database = dbQueries
+	apiCfg.jwtSecret = jwtSecret
 	apiCfg.platform = platform
 	s := &server{}
 
