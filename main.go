@@ -35,6 +35,8 @@ func main() {
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.getOneChirpHandler)
 	mux.HandleFunc("POST /api/users", apiCfg.createUserHandler)
 	mux.HandleFunc("POST /api/login", apiCfg.loginUserHandler)
+	mux.HandleFunc("POST /api/refresh", apiCfg.validateRefreshToken)
+	mux.HandleFunc("POST /api/revoke", apiCfg.revokeRefreshToken)
 
 	s.Addr = ":8080"
 	s.Handler = mux

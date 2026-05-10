@@ -249,12 +249,28 @@ func (cfg *apiConfig) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write(jsonData)
 		return
 	}
+	createRefreshToken := database.CreateRefreshTokenParams{
+		Token:     auth.MakeRefreshToken(),
+		UserID:    user.ID,
+		ExpiresAt: time.Now().Add(60 * 24 * time.Hour).UTC(),
+	}
+
+	refreshToken, err := cfg.database.CreateRefreshToken(r.Context(), createRefreshToken)
+	if err != nil {
+		log.Printf("Error creating refresh token: %v", err)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(jsonData)
+		return
+	}
 	respUser := User{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
-		Token:     token,
+		ID:           user.ID,
+		CreatedAt:    user.CreatedAt,
+		UpdatedAt:    user.UpdatedAt,
+		Email:        user.Email,
+		Token:        token,
+		RefreshToken: refreshToken.Token,
 	}
 	jsonData, _ := json.Marshal(respUser)
 	w.WriteHeader(http.StatusOK)
@@ -310,4 +326,77 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 	jsonData, _ := json.Marshal(respUser)
 	w.WriteHeader(http.StatusCreated)
 	w.Write(jsonData)
+}
+
+func (cfg *apiConfig) validateRefreshToken(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		log.Printf("No authorization header found")
+		jsonData, _ := json.Marshal(map[string]string{"error": "Authorization header missing"})
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write(jsonData)
+		return
+	}
+
+	nonBearedToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error getting bearer token: %v", err)
+		jsonData, _ := json.Marshal(map[string]string{"error": "Something went wrong"})
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write(jsonData)
+		return
+	}
+
+	refreshTokenRow, err := cfg.database.GetUserFromRefreshToken(r.Context(), nonBearedToken)
+	if err != nil {
+		log.Printf("Error getting user from refresh token: %v", err)
+		jsonData, _ := json.Marshal(map[string]string{"error": "Something went wrong"})
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write(jsonData)
+		return
+	}
+	if refreshTokenRow.ExpiresAt.Before(time.Now().UTC()) || refreshTokenRow.RevokedAt.Valid != false {
+		log.Printf("Refresh token expired")
+		jsonData, _ := json.Marshal(map[string]string{"error": "Refresh token expired"})
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write(jsonData)
+		return
+	}
+
+	newAccessToken, err := auth.MakeJWT(refreshTokenRow.UserID, cfg.jwtSecret, time.Duration(60)*time.Minute)
+	if err != nil {
+		log.Printf("Error creating token: %v", err)
+		jsonData, _ := json.Marshal(map[string]string{"error": "Something went wrong"})
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(jsonData)
+		return
+	}
+
+	data := map[string]string{"token": newAccessToken}
+	jsonData, _ := json.Marshal(data)
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+}
+
+func (cfg *apiConfig) revokeRefreshToken(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		log.Printf("No authorization header found")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	nonBearedToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error getting bearer token: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	errq := cfg.database.RevokeRefreshToken(r.Context(), nonBearedToken)
+	if errq != nil {
+		log.Printf("Error revoking refresh token: %v", errq)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
