@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -230,26 +231,67 @@ func (cfg *apiConfig) getOneChirpHandler(w http.ResponseWriter, r *http.Request)
 
 func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
-	dbChips, err := cfg.database.GetAllChirps(r.Context())
-	if err != nil {
-		log.Printf("Error getting all chirps: %v", err)
-		data := map[string]string{"error": "Something went wrong"}
-		jsonData, _ := json.Marshal(data)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write(jsonData)
-		return
-	}
-	chips := make([]Chirp, len(dbChips))
-	for i, dbChip := range dbChips {
-		chips[i] = Chirp{
-			dbChip.ID,
-			dbChip.CreatedAt,
-			dbChip.UpdatedAt,
-			dbChip.Body,
-			dbChip.UserID,
+	jsonData := []byte{}
+	authorID := r.URL.Query().Get("author_id")
+	sortBy := r.URL.Query().Get("sort")
+	if authorID == "" {
+		dbChirps, err := cfg.database.GetAllChirps(r.Context())
+		if err != nil {
+			log.Printf("Error getting all chirps: %v", err)
+			data := map[string]string{"error": "Something went wrong"}
+			jsonData, _ := json.Marshal(data)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write(jsonData)
+			return
 		}
+		chirps := make([]Chirp, len(dbChirps))
+		for i, dbChirp := range dbChirps {
+			chirps[i] = Chirp{
+				dbChirp.ID,
+				dbChirp.CreatedAt,
+				dbChirp.UpdatedAt,
+				dbChirp.Body,
+				dbChirp.UserID,
+			}
+		}
+		if sortBy == "desc" {
+			slices.Reverse(chirps)
+		}
+		jsonData, _ = json.Marshal(chirps)
+	} else {
+		id, err := uuid.Parse(authorID)
+		if err != nil {
+			log.Printf("Error parsing chirp ID: %v", err)
+			data := map[string]string{"error": "Something went wrong"}
+			jsonData, _ := json.Marshal(data)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(jsonData)
+			return
+		}
+		dbChirps, err := cfg.database.GetAllChirpsFromOneUser(r.Context(), id)
+		if err != nil {
+			log.Printf("Error getting all chirps: %v", err)
+			data := map[string]string{"error": "Something went wrong"}
+			jsonData, _ := json.Marshal(data)
+			w.WriteHeader(http.StatusNotFound)
+			w.Write(jsonData)
+			return
+		}
+		chirps := make([]Chirp, len(dbChirps))
+		for i, dbChirp := range dbChirps {
+			chirps[i] = Chirp{
+				dbChirp.ID,
+				dbChirp.CreatedAt,
+				dbChirp.UpdatedAt,
+				dbChirp.Body,
+				dbChirp.UserID,
+			}
+		}
+		if sortBy == "desc" {
+			slices.Reverse(chirps)
+		}
+		jsonData, _ = json.Marshal(chirps)
 	}
-	jsonData, _ := json.Marshal(chips)
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
 }
