@@ -15,6 +15,7 @@ func main() {
 	dbURL := os.Getenv("DB_URL")
 	jwtSecret := os.Getenv("JWT_SECRET")
 	platform := os.Getenv("PLATFORM")
+	polkaKey := os.Getenv("POLKA_KEY")
 	db, _ := sql.Open("postgres", dbURL)
 	dbQueries := database.New(db)
 
@@ -24,6 +25,7 @@ func main() {
 	apiCfg.database = dbQueries
 	apiCfg.jwtSecret = jwtSecret
 	apiCfg.platform = platform
+	apiCfg.polkaKey = polkaKey
 	s := &server{}
 
 	mux.Handle("/app/", http.StripPrefix("/app", apiCfg.middlewareMetricsInc(http.FileServer(http.Dir(".")))))

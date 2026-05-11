@@ -18,6 +18,7 @@ type apiConfig struct {
 	platform       string
 	jwtSecret      string
 	fileserverHits atomic.Int32
+	polkaKey       string
 }
 
 type User struct {

@@ -65,6 +65,19 @@ func GetBearerToken(headers http.Header) (string, error) {
 	return token, nil
 }
 
+func GetAPIKey(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("Authorization header not found")
+	}
+	token, ok := strings.CutPrefix(authHeader, "ApiKey")
+	if !ok {
+		return "", errors.New("invalid token")
+	}
+	token = strings.TrimSpace(token)
+	return token, nil
+}
+
 func MakeRefreshToken() string {
 	hexEncoded := make([]byte, 32)
 	rand.Read(hexEncoded)

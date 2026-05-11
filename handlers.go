@@ -538,6 +538,18 @@ func (cfg *apiConfig) revokeRefreshToken(w http.ResponseWriter, r *http.Request)
 }
 
 func (cfg *apiConfig) changeChirpyRed(w http.ResponseWriter, r *http.Request) {
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		log.Printf("Error getting api key: %v", err)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if apiKey != cfg.polkaKey {
+		log.Printf("API key mismatch")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	type param struct {
 		Event string `json:"event"`
 		Data  struct {
@@ -546,7 +558,7 @@ func (cfg *apiConfig) changeChirpyRed(w http.ResponseWriter, r *http.Request) {
 	}
 	decoder := json.NewDecoder(r.Body)
 	params := param{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
 		log.Printf("Error decoding body: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
