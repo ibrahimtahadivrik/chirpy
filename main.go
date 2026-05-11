@@ -33,10 +33,13 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiCfg.createChirpHandler)
 	mux.HandleFunc("GET /api/chirps", apiCfg.getAllChirpsHandler)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.getOneChirpHandler)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.deleteChirpHandler)
 	mux.HandleFunc("POST /api/users", apiCfg.createUserHandler)
+	mux.HandleFunc("PUT /api/users", apiCfg.updateUserHandler)
 	mux.HandleFunc("POST /api/login", apiCfg.loginUserHandler)
 	mux.HandleFunc("POST /api/refresh", apiCfg.validateRefreshToken)
 	mux.HandleFunc("POST /api/revoke", apiCfg.revokeRefreshToken)
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.changeChirpyRed)
 
 	s.Addr = ":8080"
 	s.Handler = mux

@@ -7,7 +7,56 @@ package database
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
+
+const changeChirpyRed = `-- name: ChangeChirpyRed :exec
+update users
+set
+    is_chirpy_red = $2
+where id = $1
+`
+
+type ChangeChirpyRedParams struct {
+	ID          uuid.UUID
+	IsChirpyRed bool
+}
+
+func (q *Queries) ChangeChirpyRed(ctx context.Context, arg ChangeChirpyRedParams) error {
+	_, err := q.db.ExecContext(ctx, changeChirpyRed, arg.ID, arg.IsChirpyRed)
+	return err
+}
+
+const changeEmailAndPassword = `-- name: ChangeEmailAndPassword :one
+update users
+set
+    email = $2,
+    hashed_password = $3,
+    updated_at = now()
+where id = $1
+returning id, created_at, updated_at, email, hashed_password, is_chirpy_red
+`
+
+type ChangeEmailAndPasswordParams struct {
+	ID             uuid.UUID
+	Email          string
+	HashedPassword string
+}
+
+func (q *Queries) ChangeEmailAndPassword(ctx context.Context, arg ChangeEmailAndPasswordParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, changeEmailAndPassword, arg.ID, arg.Email, arg.HashedPassword)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Email,
+		&i.HashedPassword,
+		&i.IsChirpyRed,
+	)
+	return i, err
+}
 
 const createUser = `-- name: CreateUser :one
 insert into users(id, created_at, updated_at, email, hashed_password)
@@ -18,7 +67,7 @@ values(
     $1,
     $2
 )
-returning id, created_at, updated_at, email, hashed_password
+returning id, created_at, updated_at, email, hashed_password, is_chirpy_red
 `
 
 type CreateUserParams struct {
@@ -35,6 +84,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.Email,
 		&i.HashedPassword,
+		&i.IsChirpyRed,
 	)
 	return i, err
 }
@@ -49,7 +99,7 @@ func (q *Queries) DeleteUsers(ctx context.Context) error {
 }
 
 const validateUser = `-- name: ValidateUser :one
-select id, created_at, updated_at, email, hashed_password from users
+select id, created_at, updated_at, email, hashed_password, is_chirpy_red from users
 where email = $1
 `
 
@@ -62,6 +112,7 @@ func (q *Queries) ValidateUser(ctx context.Context, email string) (User, error) 
 		&i.UpdatedAt,
 		&i.Email,
 		&i.HashedPassword,
+		&i.IsChirpyRed,
 	)
 	return i, err
 }

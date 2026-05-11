@@ -132,6 +132,70 @@ func (cfg *apiConfig) createChirpHandler(w http.ResponseWriter, r *http.Request)
 
 }
 
+func (cfg *apiConfig) deleteChirpHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error getting bearer token: %v", err)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write(jsonData)
+		return
+	}
+
+	id, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		log.Printf("Error while validating token: %v", err)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write(jsonData)
+		return
+	}
+
+	chirpID, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		log.Printf("Error parsing chirp ID: %v", err)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(jsonData)
+		return
+	}
+
+	chirp, err := cfg.database.GetOneChirp(r.Context(), chirpID)
+	if err != nil {
+		log.Printf("Error getting chirp: %v", err)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusNotFound)
+		w.Write(jsonData)
+		return
+	}
+
+	if chirp.UserID != id {
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusForbidden)
+		w.Write(jsonData)
+		return
+	}
+
+	errq := cfg.database.DeleteOneChirp(r.Context(), chirpID)
+	if errq != nil {
+		log.Printf("Error deleting chirp: %v", errq)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(jsonData)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	w.Write([]byte("chirp  deleted"))
+}
+
 func (cfg *apiConfig) getOneChirpHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 	chirpID, err := uuid.Parse(r.PathValue("chirpID"))
@@ -271,6 +335,7 @@ func (cfg *apiConfig) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 		Email:        user.Email,
 		Token:        token,
 		RefreshToken: refreshToken.Token,
+		IsChirpyRed:  user.IsChirpyRed,
 	}
 	jsonData, _ := json.Marshal(respUser)
 	w.WriteHeader(http.StatusOK)
@@ -317,14 +382,85 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respUser := User{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+		ID:          user.ID,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+		Email:       user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	}
 
 	jsonData, _ := json.Marshal(respUser)
 	w.WriteHeader(http.StatusCreated)
+	w.Write(jsonData)
+}
+
+func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error getting bearer token: %v", err)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write(jsonData)
+		return
+	}
+	id, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		log.Printf("Error validating token: %v", err)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write(jsonData)
+		return
+	}
+	type param struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	params := param{}
+	err = decoder.Decode(&params)
+	if err != nil {
+		log.Printf("error decoding body: %v", err)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(jsonData)
+		return
+	}
+	hashed, err := auth.HashPassword(params.Password)
+	if err != nil {
+		log.Printf("error hashing password: %v", err)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(jsonData)
+		return
+	}
+	changeEmailAndPasswordParams := database.ChangeEmailAndPasswordParams{}
+	changeEmailAndPasswordParams.ID = id
+	changeEmailAndPasswordParams.Email = params.Email
+	changeEmailAndPasswordParams.HashedPassword = hashed
+
+	user, err := cfg.database.ChangeEmailAndPassword(r.Context(), changeEmailAndPasswordParams)
+	if err != nil {
+		log.Printf("Error changing email and password: %v", err)
+		data := map[string]string{"error": "Something went wrong"}
+		jsonData, _ := json.Marshal(data)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(jsonData)
+		return
+	}
+	respUser := User{
+		ID:          user.ID,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+		Email:       user.Email,
+		IsChirpyRed: user.IsChirpyRed,
+	}
+	jsonData, _ := json.Marshal(respUser)
+	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
 }
 
@@ -396,6 +532,45 @@ func (cfg *apiConfig) revokeRefreshToken(w http.ResponseWriter, r *http.Request)
 	if errq != nil {
 		log.Printf("Error revoking refresh token: %v", errq)
 		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (cfg *apiConfig) changeChirpyRed(w http.ResponseWriter, r *http.Request) {
+	type param struct {
+		Event string `json:"event"`
+		Data  struct {
+			UserID string `json:"user_id"`
+		} `json:"data"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	params := param{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error decoding body: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if params.Event != "user.upgraded" {
+		log.Printf("Invalid event: %v", params.Event)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	changeChirpyRedParams := database.ChangeChirpyRedParams{}
+	id, err := uuid.Parse(params.Data.UserID)
+	if err != nil {
+		log.Printf("Error parsing user id: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	changeChirpyRedParams.ID = id
+	changeChirpyRedParams.IsChirpyRed = true
+
+	err = cfg.database.ChangeChirpyRed(r.Context(), changeChirpyRedParams)
+	if err != nil {
+		log.Printf("Error changing chirpy red: %v", err)
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
